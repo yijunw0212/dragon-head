@@ -12,6 +12,8 @@ import org.dragon.agent.react.ReActExecutor;
 import org.dragon.agent.react.ReActResult;
 import org.dragon.agent.workflow.WorkflowExecutor;
 import org.dragon.agent.workflow.WorkflowResult;
+import org.dragon.character.mind.Mind;
+import org.dragon.character.mind.DefaultMind;
 import org.dragon.character.task.DefaultTaskManager;
 import org.dragon.character.task.Task;
 import org.dragon.character.task.TaskManager;
@@ -90,6 +92,12 @@ public class Character {
      * 心智模块配置
      */
     private MindConfig mindConfig;
+
+    /**
+     * Mind 实例
+     * 根据 mindConfig 创建，负责管理 PersonalityDescriptor、TagRepository、MemoryAccess、SkillAccess
+     */
+    private Mind mind;
 
     /**
      * 执行引擎配置
@@ -250,8 +258,9 @@ public class Character {
 
         // 构建系统 prompt（从 Mind 获取）
         String systemPrompt = "";
-        if (getMindConfig() != null && getMindConfig().getPersonalityDescriptorPath() != null) {
-            // TODO: 加载 Mind 的性格描述并转换为 prompt
+        Mind currentMind = getMind(); // 确保 Mind 已初始化
+        if (currentMind != null && currentMind.getPersonality() != null) {
+            systemPrompt = currentMind.getPersonality().toPrompt();
         }
 
         // 构建 ReAct 上下文
@@ -286,6 +295,42 @@ public class Character {
                 .status(org.dragon.agent.workflow.WorkflowState.State.FAILED)
                 .errorMessage("Workflow execution not fully implemented yet")
                 .build();
+    }
+
+    /**
+     * 获取 Mind 实例
+     * 如果 mind 为 null，则根据 mindConfig 创建
+     *
+     * @return Mind 实例
+     */
+    public Mind getMind() {
+        if (mind == null && mindConfig != null) {
+            initMind();
+        }
+        return mind;
+    }
+
+    /**
+     * 初始化 Mind 实例
+     * 根据 mindConfig 创建 Mind 实例
+     */
+    private void initMind() {
+        if (mindConfig == null) {
+            return;
+        }
+
+        // 加载性格描述
+        String personalityPath = mindConfig.getPersonalityDescriptorPath();
+        if (personalityPath != null && !personalityPath.isEmpty()) {
+            DefaultMind defaultMind = new DefaultMind(
+                    this.id,
+                    null, // TagRepository - TODO: 根据 mindConfig.getTagRepositoryType() 创建
+                    null, // MemoryAccess - TODO: 根据 mindConfig.getMemoryAccessType() 创建
+                    null  // SkillAccess - TODO: 根据 mindConfig.getSkillAccessType() 创建
+            );
+            defaultMind.loadPersonality(personalityPath);
+            this.mind = defaultMind;
+        }
     }
 
     // ==================== 任务管理接口 ====================
