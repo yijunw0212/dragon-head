@@ -4,7 +4,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.dragon.channel.adapter.ChannelAdapter;
-import org.dragon.channel.entity.NormalizedMessage;
+import org.dragon.channel.entity.ActionMessage;
 import org.dragon.gateway.Gateway;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -37,7 +37,7 @@ public class ChannelManager {
         this.gateway = gateway;
         for (ChannelAdapter adapter : adapters) {
             registry.put(adapter.getChannelName(), adapter);
-            log.info("[Manager] 成功注册channel插件: " + adapter.getChannelName());
+            log.info("[Manager] 成功注册channel插件:{}", adapter.getChannelName());
         }
     }
 
@@ -49,7 +49,7 @@ public class ChannelManager {
                 try {
                     adapter.startListening(gateway);
                 } catch (Exception e) {
-                    log.error("[Manager] channel: " + adapter.getChannelName() + " 启动失败: " + e.getMessage());
+                    log.error("[Manager] channel:{} 启动失败", adapter.getChannelName(), e);
                 }
             });
         }
@@ -70,27 +70,26 @@ public class ChannelManager {
                             adapter.restart();
                             log.info("[Watchdog] channel:{} restart success!", adapter.getChannelName());
                         } catch (Exception e) {
-                            log.error("[Watchdog] channel restart fail，可能需要人工介入: " + e.getMessage());
+                            log.error("[Watchdog] channel:{} restart fail", adapter.getChannelName(), e);
                         }
                     });
                 }
             } catch (Exception e) {
                 // 防止由于某个 Channel 的 isHealthy 抛错，导致整个巡检挂掉
-                e.printStackTrace();
+                log.error("[Watchdog] 健康巡检失败", e);
             }
         }
     }
 
     // 提供给 Gateway 或大模型使用的统一发送入口 (下行路由分发)
-    public CompletableFuture<Void> routeMessageOutbound(String targetChannel, String targetUser, NormalizedMessage msg) {
-        ChannelAdapter adapter = registry.get(targetChannel);
+    public CompletableFuture<Void> routeMessageOutbound(ActionMessage message) {
+        ChannelAdapter adapter = registry.get(message.getChannelName());
         if (adapter == null) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("未找到对应的channel: " + targetChannel));
+            return CompletableFuture.failedFuture(new IllegalArgumentException("未找到对应的channel: " + message.getChannelName()));
         }
-        return adapter.sendMessage(targetUser, msg);
+        return adapter.sendMessage(message);
     }
 
-    // Spring Boot 关闭时自动执行，优雅释放 Netty 资源
     @PreDestroy
     public void stopAllChannels() {
         log.info("[Manager] 服务中止，正在关闭所有channel...");
